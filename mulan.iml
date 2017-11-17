@@ -24,7 +24,9 @@
           <root url="jar://$MODULE_DIR$/lib/weka-3.7.10.jar!/" />
         </CLASSES>
         <JAVADOC />
-        <SOURCES />
+        <SOURCES>
+          <root url="jar://$MODULE_DIR$/lib/weka-dev-3.7.10-sources.jar!/" />
+        </SOURCES>
       </library>
     </orderEntry>
     <orderEntry type="module-library">
@@ -43,6 +45,17 @@
         </CLASSES>
         <JAVADOC />
         <SOURCES />
+      </library>
+    </orderEntry>
+    <orderEntry type="module-library">
+      <library>
+        <CLASSES>
+          <root url="jar://$MODULE_DIR$/lib/weka-dev-3.7.10-tests.jar!/" />
+        </CLASSES>
+        <JAVADOC />
+        <SOURCES>
+          <root url="jar://$MODULE_DIR$/lib/weka-dev-3.7.10-test-sources.jar!/" />
+        </SOURCES>
       </library>
     </orderEntry>
   </component>

@@ -18,6 +18,7 @@ package mulan.classifier.transformation;
 import java.util.Arrays;
 import java.util.Random;
 import mulan.classifier.InvalidDataException;
+import mulan.classifier.MultiLabelLearnerBase;
 import mulan.classifier.MultiLabelOutput;
 import mulan.data.MultiLabelInstances;
 import weka.classifiers.Classifier;
@@ -41,14 +42,17 @@ import weka.filters.unsupervised.instance.RemovePercentage;
 public class EnsembleOfClassifierChains extends TransformationBasedMultiLabelLearner {
 
     /**
+     * 分类器链数
      * The number of classifier chain models
      */
     protected int numOfModels;
     /**
+     * 保存所有分类器链的数组
      * An array of ClassifierChain models
      */
     protected ClassifierChain[] ensemble;
     /**
+     * 随机数生成器
      * Random number generator
      */
     protected Random rand;
@@ -215,5 +219,20 @@ public class EnsembleOfClassifierChains extends TransformationBasedMultiLabelLea
 
         MultiLabelOutput mlo = new MultiLabelOutput(confidence, 0.5);
         return mlo;
+    }
+
+    public static void main(String[] args) throws Exception{
+        String path = "./data/testData/";
+        Classifier baseClassifier = new J48();
+        MultiLabelLearnerBase learner = new EnsembleOfClassifierChains(baseClassifier, 10, false, false);
+
+        String trainDatasetPath = path + "emotions-train.arff";
+        String testDatasetPath = path + "emotions-test.arff";
+        String xmlLabelsDefFilePath = path + "emotions.xml";
+        MultiLabelInstances trainDataSet = new MultiLabelInstances(trainDatasetPath, xmlLabelsDefFilePath);
+        MultiLabelInstances testDataSet = new MultiLabelInstances(testDatasetPath, xmlLabelsDefFilePath);
+
+        learner.build(trainDataSet);
+        System.out.println(learner.makePrediction(testDataSet.getDataSet().firstInstance()));
     }
 }
