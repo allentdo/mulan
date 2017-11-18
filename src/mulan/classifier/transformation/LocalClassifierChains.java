@@ -10,11 +10,7 @@ import weka.core.Instance;
 import weka.core.Instances;
 import weka.filters.Filter;
 import weka.filters.unsupervised.attribute.Remove;
-
-import java.util.Arrays;
-import java.util.HashSet;
-import java.util.Iterator;
-import java.util.Random;
+import java.util.*;
 
 /**
  * 局部标签关联分类器链算法
@@ -43,10 +39,20 @@ public class LocalClassifierChains extends TransformationBasedMultiLabelLearner{
     protected boolean debug;
 
     /**
+     * 聚类最大迭代次数
+     */
+    protected int iterNum;
+
+    /**
+     * 聚类可接受最大中心改变量
+     */
+    protected double maxChange;
+
+    /**
      * Default constructor
      */
     public LocalClassifierChains() {
-        this(new J48(), 2, false);
+        this(new J48(), 2, 10, 0.1, true);
     }
 
     /**
@@ -55,12 +61,14 @@ public class LocalClassifierChains extends TransformationBasedMultiLabelLearner{
      * @param classifier 基分类器
      * @param aNumOfLocalModels 局部分类器链数
      */
-    public LocalClassifierChains(Classifier classifier, int aNumOfLocalModels, boolean isDebug) {
+    public LocalClassifierChains(Classifier classifier, int aNumOfLocalModels, int iterNum, double maxChange, boolean isDebug) {
         super(classifier);
-        numOfLocalModels = aNumOfLocalModels;
-        lccs = new ClassifierChain[aNumOfLocalModels];
-        rand = new Random(System.nanoTime());
-        debug = isDebug;
+        this.numOfLocalModels = aNumOfLocalModels;
+        this.lccs = new ClassifierChain[aNumOfLocalModels];
+        this.rand = new Random(System.nanoTime());
+        this.iterNum = iterNum;
+        this.maxChange = maxChange;
+        this.debug = isDebug;
     }
 
     /**
@@ -91,9 +99,10 @@ public class LocalClassifierChains extends TransformationBasedMultiLabelLearner{
      * @param k
      * @return
      */
-    private int[][] kModesCossimil(int[][] ins,int k) throws IllegalArgumentException{
+    private int[][] kModesCossimil(int[][] ins,int k,int inum,double maxc) throws IllegalArgumentException{
         //数据检查
         if(ins.length<k) throw new IllegalArgumentException("聚类类簇数大于距离数");
+        if(inum<1 && maxc<0.1) throw new IllegalArgumentException("聚类条件输入错误");
         //将标签中的0替换为-1，使数据归一化及可以正确计算余弦相似度
         for (int i = 0; i < ins.length; i++) {
             for (int j = 0; j < ins[i].length; j++) {
@@ -113,13 +122,72 @@ public class LocalClassifierChains extends TransformationBasedMultiLabelLearner{
             centers[i] = ins[initCenterItor.next()];
             i++;
         }
-        for (int j = 0; j < ins.length; j++) {
-            System.out.println(Arrays.toString(ins[j]));
+        //记录聚类中心改变量
+        double changeNum = Double.MAX_VALUE;
+        //记录迭代次数
+        i = 0;
+        //记录每个蔟信息
+        ArrayList<ArrayList<CluSampInfo>> clusters = new ArrayList<>(k);
+        while (i<inum && changeNum>maxc){
+            //聚类中心改变量重置
+            changeNum = 0.0;
+            //每次重新初始化类簇信息
+            clusters.clear();
+            for (int j = 0; j < k; j++) {
+                clusters.add(new ArrayList<>(ins.length/k + 1));
+            }
+            //对于每个样本，计算和所有蔟中心的距离，将其归为距离最近的类簇
+            for (int j = 0; j < ins.length; j++) {
+                double minDis = Double.MAX_VALUE;
+                int minCenIdx = -1;
+                double minCos = -1;
+                for (int l = 0; l < centers.length; l++) {
+                    double[] tmpDisCos = expAbsCosSim(centers[l],ins[j]);
+                    if(tmpDisCos[0]<minDis){
+                        minDis = tmpDisCos[0];
+                        minCenIdx = l;
+                        minCos = tmpDisCos[1];
+                    }
+                }
+                clusters.get(minCenIdx).add(new CluSampInfo(j,minDis,minCos>0));
+            }
+            //根据新类簇重新计算每个类簇的中心，并记录总体中心距离改变
+            for (int j = 0; j < clusters.size(); j++) {
+                ArrayList<CluSampInfo> tmp = clusters.get(j);
+                //用于重新计算中心
+                int[] newCenter = new int[ins[0].length];
+                for (int l = 0; l < tmp.size(); l++) {
+                    CluSampInfo tmpInfo = tmp.get(l);
+                    int [] aSample = ins[tmpInfo.getIndex()];
+                    //区分正负相关，负相关向量映射为正相关
+                    if(tmpInfo.isPosCor()){
+                        for (int m = 0; m < newCenter.length; m++) {
+                            newCenter[m] += aSample[m];
+                        }
+                    }else{
+                        for (int m = 0; m < newCenter.length; m++) {
+                            newCenter[m] -= aSample[m];
+                        }
+                    }
+                }
+                for (int l = 0; l < newCenter.length; l++) {
+                    if(newCenter[l]>=0)
+                        newCenter[l] = 1;
+                    else
+                        newCenter[l] = -1;
+                }
+                //累加距离改变量
+                changeNum += expAbsCosSim(centers[j],newCenter)[0];
+                //更新聚类中心
+                centers[j] = newCenter;
+            }
+            i++;
+            if(debug){
+                System.out.println(changeNum);
+
+            }
         }
-        System.out.println();
-        for (int j = 0; j < centers.length; j++) {
-            System.out.println(Arrays.toString(centers[j]));
-        }
+
         return null;
     }
 
@@ -139,7 +207,7 @@ public class LocalClassifierChains extends TransformationBasedMultiLabelLearner{
             }
         }
         //聚类，并得到lcIdx
-        kModesCossimil(labelIns,numOfLocalModels);
+        kModesCossimil(labelIns,this.numOfLocalModels,this.iterNum,this.maxChange);
 
     }
 
@@ -157,13 +225,62 @@ public class LocalClassifierChains extends TransformationBasedMultiLabelLearner{
 
     public static void main(String[] args) throws Exception{
         String path = "./data/testData/";
-        String trainDatasetPath = path + "emotions-train.arff";
-        String testDatasetPath = path + "emotions-test.arff";
-        String xmlLabelsDefFilePath = path + "emotions.xml";
+        String trainDatasetPath = path + "CAL500.arff";
+        String testDatasetPath = path + "CAL500.arff";
+        String xmlLabelsDefFilePath = path + "CAL500.xml";
         MultiLabelInstances trainDataSet = new MultiLabelInstances(trainDatasetPath, xmlLabelsDefFilePath);
         MultiLabelInstances testDataSet = new MultiLabelInstances(testDatasetPath, xmlLabelsDefFilePath);
         MultiLabelLearnerBase learner = new LocalClassifierChains();
         learner.build(trainDataSet);
 
+    }
+}
+
+//保存聚类类簇中的样本信息
+class CluSampInfo{
+    //样本索引
+    private int index;
+    //到类中心的距离
+    private double dis;
+    //正相关为true,负相关为false
+    private boolean isPosCor;
+
+    public CluSampInfo(int index, double dis, boolean isPosCor) {
+        this.index = index;
+        this.dis = dis;
+        this.isPosCor = isPosCor;
+    }
+
+    public int getIndex() {
+        return index;
+    }
+
+    public void setIndex(int index) {
+        this.index = index;
+    }
+
+    public double getDis() {
+        return dis;
+    }
+
+    public void setDis(double dis) {
+        this.dis = dis;
+    }
+
+    public boolean isPosCor() {
+        return isPosCor;
+    }
+
+    public void setPosCor(boolean posCor) {
+        isPosCor = posCor;
+    }
+
+    @Override
+    public String toString() {
+        return "CluSampInfo{" +
+                "index=" + index +
+                ", dis=" + dis +
+                ", isPosCor=" + isPosCor +
+                '}';
     }
 }
