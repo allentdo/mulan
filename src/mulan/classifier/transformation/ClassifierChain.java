@@ -15,6 +15,7 @@
  */
 package mulan.classifier.transformation;
 
+import mulan.classifier.MultiLabelLearnerBase;
 import mulan.classifier.MultiLabelOutput;
 import mulan.data.DataUtils;
 import mulan.data.MultiLabelInstances;
@@ -92,12 +93,13 @@ public class ClassifierChain extends TransformationBasedMultiLabelLearner {
 
         Instances trainDataset;
         numLabels = train.getNumLabels();
-        //长度需要修改，改为chain.length
-        ensemble = new FilteredClassifier[numLabels];
+        //长度需要修改，改为chain.length！！
+//        ensemble = new FilteredClassifier[numLabels];
+        ensemble = new FilteredClassifier[chain.length];
         trainDataset = train.getDataSet();
 
-        //循环结束条件需要修改 改为i<chain.length
-        for (int i = 0; i < numLabels; i++) {
+        //循环结束条件需要修改 改为i<chain.length！！
+        for (int i = 0; i < chain.length; i++) {
             ensemble[i] = new FilteredClassifier();
             ensemble[i].setClassifier(AbstractClassifier.makeCopy(baseClassifier));
 
@@ -124,11 +126,14 @@ public class ClassifierChain extends TransformationBasedMultiLabelLearner {
     }
 
     protected MultiLabelOutput makePredictionInternal(Instance instance) throws Exception {
-        boolean[] bipartition = new boolean[numLabels];
-        double[] confidences = new double[numLabels];
+        //长度需要修改，改为chain.length！！
+        boolean[] bipartition = new boolean[chain.length];
+        //长度需要修改，改为chain.length！！
+        double[] confidences = new double[chain.length];
 
         Instance tempInstance = DataUtils.createInstance(instance, instance.weight(), instance.toDoubleArray());
-        for (int counter = 0; counter < numLabels; counter++) {
+        //循环结束条件需要修改 改为counter<chain.length！！
+        for (int counter = 0; counter < chain.length; counter++) {
             double distribution[];
             try {
                 distribution = ensemble[counter].distributionForInstance(tempInstance);
@@ -152,4 +157,22 @@ public class ClassifierChain extends TransformationBasedMultiLabelLearner {
         MultiLabelOutput mlo = new MultiLabelOutput(bipartition, confidences);
         return mlo;
     }
+
+    public static void main(String[] args) throws Exception{
+        String path = "./data/testData/";
+        Classifier baseClassifier = new J48();
+        int[] chn = {0,1,2};
+        MultiLabelLearnerBase learner = new ClassifierChain(baseClassifier,chn);
+
+        String trainDatasetPath = path + "emotions-train.arff";
+        String testDatasetPath = path + "emotions-test.arff";
+        String xmlLabelsDefFilePath = path + "emotions.xml";
+        MultiLabelInstances trainDataSet = new MultiLabelInstances(trainDatasetPath, xmlLabelsDefFilePath);
+        MultiLabelInstances testDataSet = new MultiLabelInstances(testDatasetPath, xmlLabelsDefFilePath);
+
+        learner.build(trainDataSet);
+        System.out.println(learner.makePrediction(testDataSet.getDataSet().firstInstance()));
+    }
 }
+
+//Bipartion: [false, false, true, true, true, false] Confidences: [0.006711409395973154, 0.05555555555555555, 1.0, 1.0, 1.0, 0.0] Ranking: [5, 4, 3, 2, 1, 6]Predicted values: null
