@@ -82,6 +82,7 @@ public class ClassifierChain extends TransformationBasedMultiLabelLearner {
     }
 
     protected void buildInternal(MultiLabelInstances train) throws Exception {
+        //默认按照自然顺序初始化链
         if (chain == null) {
             chain = new int[numLabels];
             for (int i = 0; i < numLabels; i++) {
@@ -91,9 +92,11 @@ public class ClassifierChain extends TransformationBasedMultiLabelLearner {
 
         Instances trainDataset;
         numLabels = train.getNumLabels();
+        //长度需要修改，改为chain.length
         ensemble = new FilteredClassifier[numLabels];
         trainDataset = train.getDataSet();
 
+        //循环结束条件需要修改 改为i<chain.length
         for (int i = 0; i < numLabels; i++) {
             ensemble[i] = new FilteredClassifier();
             ensemble[i].setClassifier(AbstractClassifier.makeCopy(baseClassifier));

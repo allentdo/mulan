@@ -6,6 +6,7 @@ import mulan.classifier.MultiLabelOutput;
 import mulan.data.MultiLabelInstances;
 import weka.classifiers.Classifier;
 import weka.classifiers.trees.J48;
+import weka.core.DenseInstance;
 import weka.core.Instance;
 import weka.core.Instances;
 import weka.filters.Filter;
@@ -52,7 +53,7 @@ public class LocalClassifierChains extends TransformationBasedMultiLabelLearner{
      * Default constructor
      */
     public LocalClassifierChains() {
-        this(new J48(), 2, 10, 0.1, true);
+        this(new J48(), 2, 10, 0.0, true);
     }
 
     /**
@@ -184,11 +185,31 @@ public class LocalClassifierChains extends TransformationBasedMultiLabelLearner{
             i++;
             if(debug){
                 System.out.println(changeNum);
-
+                for (int j = 0; j < clusters.size(); j++) {
+                    System.out.println(Arrays.toString(centers[j]));
+                    System.out.println(clusters.get(j));
+                }
+                System.out.println();
             }
         }
-
-        return null;
+        int[][] res = new int[k][];
+        for (int j = 0; j < clusters.size(); j++) {
+            clusters.get(j).sort(new SortByDisDsc());
+        }
+        for (int j = 0; j < clusters.size(); j++) {
+            ArrayList<CluSampInfo> tmp = clusters.get(j);
+            int[] tmparr = new int[tmp.size()];
+            for (int l = 0; l < tmparr.length; l++) {
+                tmparr[l] = tmp.get(l).getIndex();
+            }
+            res[j] = tmparr;
+        }
+        if(debug){
+            for (int j = 0; j < res.length; j++) {
+                System.out.println(Arrays.toString(res[j]));
+            }
+        }
+        return res;
     }
 
     private void computeLcIdx(Instances dataSet) throws Exception {
@@ -201,13 +222,13 @@ public class LocalClassifierChains extends TransformationBasedMultiLabelLearner{
         //标签数据转置
         int[][] labelIns = new int[labelIndices.length][labels.size()];
         for (int i = 0; i < labels.size(); i++) {
-            String[] tmp = labels.get(i).toString().split(",");
+            String[] tmp = new DenseInstance(labels.get(i)).toString().split(",");
             for (int j = 0; j < tmp.length; j++) {
                 labelIns[j][i] = Integer.valueOf(tmp[j]);
             }
         }
         //聚类，并得到lcIdx
-        kModesCossimil(labelIns,this.numOfLocalModels,this.iterNum,this.maxChange);
+        this.lcIdx=kModesCossimil(labelIns,this.numOfLocalModels,this.iterNum,this.maxChange);
 
     }
 
@@ -225,14 +246,21 @@ public class LocalClassifierChains extends TransformationBasedMultiLabelLearner{
 
     public static void main(String[] args) throws Exception{
         String path = "./data/testData/";
-        String trainDatasetPath = path + "CAL500.arff";
-        String testDatasetPath = path + "CAL500.arff";
-        String xmlLabelsDefFilePath = path + "CAL500.xml";
+        String trainDatasetPath = path + "emotions-train.arff";
+        String testDatasetPath = path + "emotions-test.arff";
+        String xmlLabelsDefFilePath = path + "emotions.xml";
         MultiLabelInstances trainDataSet = new MultiLabelInstances(trainDatasetPath, xmlLabelsDefFilePath);
         MultiLabelInstances testDataSet = new MultiLabelInstances(testDatasetPath, xmlLabelsDefFilePath);
         MultiLabelLearnerBase learner = new LocalClassifierChains();
         learner.build(trainDataSet);
+    }
+}
 
+//按照距离从大到小进行排序
+class SortByDisDsc implements Comparator<CluSampInfo>{
+    @Override
+    public int compare(CluSampInfo o1, CluSampInfo o2) {
+        return o1.getDis()>o2.getDis()?-1:1;
     }
 }
 
