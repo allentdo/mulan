@@ -1,18 +1,3 @@
-/*
- *    This program is free software; you can redistribute it and/or modify
- *    it under the terms of the GNU General Public License as published by
- *    the Free Software Foundation; either version 2 of the License, or
- *    (at your option) any later version.
- *
- *    This program is distributed in the hope that it will be useful,
- *    but WITHOUT ANY WARRANTY; without even the implied warranty of
- *    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- *    GNU General Public License for more details.
- *
- *    You should have received a copy of the GNU General Public License
- *    along with this program; if not, write to the Free Software
- *    Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
- */
 package mulan.classifier.transformation;
 
 import mulan.classifier.MultiLabelLearnerBase;
@@ -31,18 +16,9 @@ import weka.filters.unsupervised.attribute.Remove;
 import java.util.HashMap;
 
 /**
- * <p>Implementation of the Classifier Chain (CC) algorithm.</p> <p>For more
- * information, see <em>Read, J.; Pfahringer, B.; Holmes, G.; Frank, E.
- * (2011) Classifier Chains for Multi-label Classification. Machine Learning.
- * 85(3):335-359.</em></p>
- *
- * @author Eleftherios Spyromitros-Xioufis
- * @author Konstantinos Sechidis
- * @author Grigorios Tsoumakas
- * @version 2012.02.27
+ * Created by WangHong on 2017/11/19.
  */
-public class ClassifierChain extends TransformationBasedMultiLabelLearner {
-
+public class LocalClassifieChain extends TransformationBasedMultiLabelLearner{
     /**
      * The new chain ordering of the label indices
      */
@@ -58,7 +34,7 @@ public class ClassifierChain extends TransformationBasedMultiLabelLearner {
     /**
      * Creates a new instance using J48 as the underlying classifier
      */
-    public ClassifierChain() {
+    public LocalClassifieChain() {
         super(new J48());
     }
 
@@ -67,9 +43,9 @@ public class ClassifierChain extends TransformationBasedMultiLabelLearner {
      *
      * @param classifier the base-level classification algorithm that will be
      * used for training each of the binary models
-     * @param aChain contains the order of the label indexes [0..numLabels-1] 
+     * @param aChain contains the order of the label indexes [0..numLabels-1]
      */
-    public ClassifierChain(Classifier classifier, int[] aChain) {
+    public LocalClassifieChain(Classifier classifier, int[] aChain) {
         super(classifier);
         chain = aChain;
     }
@@ -80,7 +56,7 @@ public class ClassifierChain extends TransformationBasedMultiLabelLearner {
      * @param classifier the base-level classification algorithm that will be
      * used for training each of the binary models
      */
-    public ClassifierChain(Classifier classifier) {
+    public LocalClassifieChain(Classifier classifier) {
         super(classifier);
     }
 
@@ -160,10 +136,10 @@ public class ClassifierChain extends TransformationBasedMultiLabelLearner {
 
             // Ensure correct predictions both for class values {0,1} and {1,0}
             Attribute classAttribute = ensemble[counter].getFilter().getOutputFormat().classAttribute();
-            bipartition[chain[counter]] = (classAttribute.value(maxIndex).equals("1")) ? true : false;
+            bipartition[counter] = (classAttribute.value(maxIndex).equals("1")) ? true : false;
 
             // The confidence of the label being equal to 1
-            confidences[chain[counter]] = distribution[classAttribute.indexOfValue("1")];
+            confidences[counter] = distribution[classAttribute.indexOfValue("1")];
 
             tempInstance.setValue(labelIndices[chain[counter]], maxIndex);
 
@@ -177,7 +153,7 @@ public class ClassifierChain extends TransformationBasedMultiLabelLearner {
         String path = "./data/testData/";
         Classifier baseClassifier = new J48();
         int[] chn = {5,3,4,0};
-        MultiLabelLearnerBase learner = new ClassifierChain(baseClassifier,chn);
+        MultiLabelLearnerBase learner = new LocalClassifieChain(baseClassifier,chn);
 
         String trainDatasetPath = path + "emotions-train.arff";
         String testDatasetPath = path + "emotions-test.arff";
@@ -189,6 +165,4 @@ public class ClassifierChain extends TransformationBasedMultiLabelLearner {
         System.out.println(learner.makePrediction(testDataSet.getDataSet().firstInstance()));
     }
 }
-
-//Bipartion: [false, false, true, true, true, false] Confidences: [0.006711409395973154, 0.05555555555555555, 1.0, 1.0, 1.0, 0.0] Ranking: [5, 4, 3, 2, 1, 6]Predicted values: null
-//Bipartion: [false, false, false, true, true, false] Confidences: [0.0, 0.010526315789473684, 0.0, 1.0, 1.0, 0.018072289156626505] Ranking: [6, 4, 5, 2, 1, 3]Predicted values: null
+//Bipartion: [false, true, true, false] Confidences: [0.018072289156626505, 1.0, 1.0, 0.0] Ranking: [3, 2, 1, 4]Predicted values: null

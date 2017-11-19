@@ -3,9 +3,14 @@ package mulan.classifier.transformation;
 
 import mulan.classifier.MultiLabelLearnerBase;
 import mulan.classifier.MultiLabelOutput;
+import mulan.classifier.lazy.MLkNN;
 import mulan.data.MultiLabelInstances;
+import mulan.evaluation.Evaluation;
+import mulan.evaluation.Evaluator;
+import mulan.evaluation.measure.*;
 import weka.classifiers.Classifier;
 import weka.classifiers.trees.J48;
+import weka.classifiers.trees.RandomForest;
 import weka.core.DenseInstance;
 import weka.core.Instance;
 import weka.core.Instances;
@@ -17,7 +22,7 @@ import java.util.*;
  * 局部标签关联分类器链算法
  * Created by WangHong on 2017/11/17.
  */
-public class LocalClassifierChains extends TransformationBasedMultiLabelLearner{
+public class ClusterLocalClassifierChains extends TransformationBasedMultiLabelLearner{
     /**
      * 局部分类器链数
      */
@@ -25,7 +30,7 @@ public class LocalClassifierChains extends TransformationBasedMultiLabelLearner{
     /**
      * 保存局部分类器链的数组
      */
-    protected ClassifierChain[] lccs;
+    protected LocalClassifieChain[] lccs;
     /**
      * 保存局部分类器链顺序的数组
      */
@@ -52,7 +57,7 @@ public class LocalClassifierChains extends TransformationBasedMultiLabelLearner{
     /**
      * Default constructor
      */
-    public LocalClassifierChains() {
+    public ClusterLocalClassifierChains() {
         this(new J48(), 2, 10, 0.0, true);
     }
 
@@ -62,10 +67,10 @@ public class LocalClassifierChains extends TransformationBasedMultiLabelLearner{
      * @param classifier 基分类器
      * @param aNumOfLocalModels 局部分类器链数
      */
-    public LocalClassifierChains(Classifier classifier, int aNumOfLocalModels, int iterNum, double maxChange, boolean isDebug) {
+    public ClusterLocalClassifierChains(Classifier classifier, int aNumOfLocalModels, int iterNum, double maxChange, boolean isDebug) {
         super(classifier);
         this.numOfLocalModels = aNumOfLocalModels;
-        this.lccs = new ClassifierChain[aNumOfLocalModels];
+        this.lccs = new LocalClassifieChain[aNumOfLocalModels];
         this.rand = new Random(System.nanoTime());
         this.iterNum = iterNum;
         this.maxChange = maxChange;
@@ -229,19 +234,34 @@ public class LocalClassifierChains extends TransformationBasedMultiLabelLearner{
         }
         //聚类，并得到lcIdx
         this.lcIdx=kModesCossimil(labelIns,this.numOfLocalModels,this.iterNum,this.maxChange);
-
     }
 
     @Override
     protected void buildInternal(MultiLabelInstances trainingSet) throws Exception {
         Instances dataSet = new Instances(trainingSet.getDataSet());
         computeLcIdx(dataSet);
-
+        //根据lcIdx训练k个CC链
+        for (int i = 0; i < this.lcIdx.length; i++) {
+            this.lccs[i] = new LocalClassifieChain(baseClassifier, this.lcIdx[i]);
+            this.lccs[i].build(trainingSet);
+        }
     }
 
     @Override
     protected MultiLabelOutput makePredictionInternal(Instance instance) throws Exception {
-        return null;
+        boolean[] bipartition = new boolean[numLabels];
+        double[] confidences = new double[numLabels];
+        for (int i = 0; i < this.lcIdx.length; i++) {
+            MultiLabelOutput localChainO = this.lccs[i].makePrediction(instance);
+            boolean[] bip = localChainO.getBipartition();
+            double[] conf = localChainO.getConfidences();
+            for (int j = 0; j < this.lcIdx[i].length; j++) {
+                bipartition[this.lcIdx[i][j]]=bip[j];
+                confidences[this.lcIdx[i][j]]=conf[j];
+            }
+        }
+        MultiLabelOutput mlo = new MultiLabelOutput(bipartition, confidences);
+        return mlo;
     }
 
     public static void main(String[] args) throws Exception{
@@ -249,10 +269,47 @@ public class LocalClassifierChains extends TransformationBasedMultiLabelLearner{
         String trainDatasetPath = path + "emotions-train.arff";
         String testDatasetPath = path + "emotions-test.arff";
         String xmlLabelsDefFilePath = path + "emotions.xml";
-        MultiLabelInstances trainDataSet = new MultiLabelInstances(trainDatasetPath, xmlLabelsDefFilePath);
-        MultiLabelInstances testDataSet = new MultiLabelInstances(testDatasetPath, xmlLabelsDefFilePath);
-        MultiLabelLearnerBase learner = new LocalClassifierChains();
-        learner.build(trainDataSet);
+        MultiLabelLearnerBase CLCC = new ClusterLocalClassifierChains(new RandomForest(), 2, 10, 0.0, true);
+        MultiLabelLearnerBase CC = new ClassifierChain(new RandomForest());
+        MultiLabelLearnerBase MLknn = new MLkNN();
+        MultiLabelLearnerBase ECC = new EnsembleOfClassifierChains(new RandomForest(),10, true, true);
+        run(trainDatasetPath,xmlLabelsDefFilePath,testDatasetPath,CLCC);
+        run(trainDatasetPath,xmlLabelsDefFilePath,testDatasetPath,CC);
+        run(trainDatasetPath,xmlLabelsDefFilePath,testDatasetPath,MLknn);
+        run(trainDatasetPath,xmlLabelsDefFilePath,testDatasetPath,ECC);
+
+    }
+
+    private static void run(String arffFilename,String xmlFilename,String unlabeledFilename,MultiLabelLearnerBase learn) throws Exception {
+
+        MultiLabelInstances dataset = new MultiLabelInstances(arffFilename, xmlFilename);
+
+        learn.build(dataset);
+
+        MultiLabelInstances unlabeledData = new MultiLabelInstances(unlabeledFilename,xmlFilename);
+
+        //多标签指标评估
+        ArrayList measures = new ArrayList();
+        Measure Fexam = new MicroFMeasure(dataset.getNumLabels());
+        Measure F1 = new MacroFMeasure(dataset.getNumLabels());
+        Measure hloss = new HammingLoss();
+        Measure oneError = new OneError();
+        Measure coverage = new Coverage();
+        Measure rloss = new RankingLoss();
+        Measure avgPre= new AveragePrecision();
+
+        measures.add(Fexam);
+        measures.add(F1);
+        measures.add(hloss);
+        measures.add(oneError);
+        measures.add(coverage);
+        measures.add(rloss);
+        measures.add(avgPre);
+
+        Evaluator eval = new Evaluator();
+        Evaluation results = eval.evaluate(learn,unlabeledData,measures);
+        System.out.println(unlabeledFilename);
+        System.out.println(results);
     }
 }
 
