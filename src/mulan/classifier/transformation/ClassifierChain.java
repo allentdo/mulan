@@ -28,6 +28,9 @@ import weka.core.Instance;
 import weka.core.Instances;
 import weka.filters.unsupervised.attribute.Remove;
 
+import java.util.HashMap;
+import java.util.HashSet;
+
 /**
  * <p>Implementation of the Classifier Chain (CC) algorithm.</p> <p>For more
  * information, see <em>Read, J.; Pfahringer, B.; Holmes, G.; Frank, E.
@@ -107,8 +110,21 @@ public class ClassifierChain extends TransformationBasedMultiLabelLearner {
             // the numLabels - 1 attributes and so on.
             // The loop starts from the last attribute.
             int[] indicesToRemove = new int[numLabels - 1 - i];
-            int counter2 = 0;
-            for (int counter1 = 0; counter1 < numLabels - i - 1; counter1++) {
+            //得到分类器链和整体标签的差集，预先加入indicesToRemove中
+            HashMap<Integer,Integer> mapAll = new HashMap<>();
+            for (int j = 0; j < chain.length; j++) {
+                mapAll.put(chain[j],1);
+            }
+            int n = 0;
+            for (int j = 0; j < numLabels; j++) {
+                if(!mapAll.containsKey(j)){
+                    indicesToRemove[n]=j;
+                    n++;
+                }
+            }
+
+            int counter2 = numLabels-chain.length;
+            for (int counter1 = n; counter1 < numLabels - i - 1; counter1++) {
                 indicesToRemove[counter1] = labelIndices[chain[numLabels - 1 - counter2]];
                 counter2++;
             }
@@ -161,7 +177,7 @@ public class ClassifierChain extends TransformationBasedMultiLabelLearner {
     public static void main(String[] args) throws Exception{
         String path = "./data/testData/";
         Classifier baseClassifier = new J48();
-        int[] chn = {0,1,2};
+        int[] chn = {0,1,2,3};
         MultiLabelLearnerBase learner = new ClassifierChain(baseClassifier,chn);
 
         String trainDatasetPath = path + "emotions-train.arff";
