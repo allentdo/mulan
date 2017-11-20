@@ -78,20 +78,30 @@ public class ClusterLocalClassifierChains extends TransformationBasedMultiLabelL
      * @param v2
      * @return double[] -> 2元素 距离值，余弦相似度
      */
-    private static double[] expAbsCosSim(int[] v1, int[] v2) throws IllegalArgumentException{
+    private static double[] expAbsCosSim(double[] v1, double[] v2) throws IllegalArgumentException{
         if(v1.length!=v2.length) throw new IllegalArgumentException("向量计算距离维度不匹配");
         double cosup = 0.0;
         double cosdownv1 = 0.0;
         double cosdownv2 = 0.0;
         for (int i = 0; i < v1.length; i++) {
+            if(v1[i]==-1 && v2[i]==-1)
+                continue;
             cosup += v1[i]*v2[i];
-            //由于数据只有-1和1，可以用绝对值代替平方
-            cosdownv1 += Math.abs(v1[i]);
-            cosdownv2 += Math.abs(v2[i]);
+            cosdownv1 += Math.pow(v1[i],2);
+            cosdownv2 += Math.pow(v2[i],2);
         }
         double cos = cosup/(Math.sqrt(cosdownv1)*Math.sqrt(cosdownv2));
         double[] res = {-1.0*Math.log(Math.abs(cos)),cos};
         return res;
+    }
+
+    //整形数组变浮点型数组
+    private double[] i2darr(int[] arr){
+        double[] newarr=new double[arr.length];
+        for (int i = 0; i < arr.length; i++) {
+            newarr[i] = arr[i];
+        }
+        return newarr;
     }
 
     /**
@@ -102,7 +112,7 @@ public class ClusterLocalClassifierChains extends TransformationBasedMultiLabelL
      */
     private int[][] kModesCossimil(int[][] ins,int k,int inum,double maxc) throws IllegalArgumentException{
         //数据检查
-        if(ins.length<k) throw new IllegalArgumentException("聚类类簇数大于距离数");
+        if(ins.length<k || k<1) throw new IllegalArgumentException("聚类类簇数大于距离数");
         if(inum<1 && maxc<0.1) throw new IllegalArgumentException("聚类条件输入错误");
         //将标签中的0替换为-1，使数据归一化及可以正确计算余弦相似度
         for (int i = 0; i < ins.length; i++) {
@@ -112,17 +122,43 @@ public class ClusterLocalClassifierChains extends TransformationBasedMultiLabelL
             }
         }
         //随机初始化K个不同的蔟中心点
-        int[][] centers = new int[k][];
-        HashSet<Integer> initCenterIdx = new HashSet<>(k);
+        int i = 0;
+        double[][] centers = new double[k][];
+        /*HashSet<Integer> initCenterIdx = new HashSet<>(k);
         while (initCenterIdx.size()<k){
             initCenterIdx.add(rand.nextInt(ins.length));
         }
         Iterator<Integer> initCenterItor = initCenterIdx.iterator();
-        int i = 0;
         while (initCenterItor.hasNext()){
             centers[i] = ins[initCenterItor.next()];
             i++;
+        }*/
+
+        //按照距离最远原则初始化k个蔟中心点
+        int idx1 = rand.nextInt(ins.length);
+        if(debug){
+            System.out.println(idx1);
         }
+        centers[0] = i2darr(ins[idx1]);
+        for (int j = 1; j < k; j++) {
+            double maxDis = -1;
+            int maxIdx = -1;
+            for (int l = 0; l < ins.length; l++) {
+                double mix = Double.MAX_VALUE;
+                for (int m = 0; m < j; m++) {
+                    double i2cDis = expAbsCosSim(centers[m],i2darr(ins[l]))[0];
+                    mix = mix>i2cDis?i2cDis:mix;
+                }
+                if(maxDis<mix){
+                    maxDis = mix;
+                    maxIdx = l;
+                }
+            }
+
+            centers[j] = i2darr(ins[maxIdx]);
+            if(debug) System.out.println(maxIdx);
+        }
+
         //记录聚类中心改变量
         double changeNum = Double.MAX_VALUE;
         //记录迭代次数
@@ -143,7 +179,7 @@ public class ClusterLocalClassifierChains extends TransformationBasedMultiLabelL
                 int minCenIdx = -1;
                 double minCos = -1;
                 for (int l = 0; l < centers.length; l++) {
-                    double[] tmpDisCos = expAbsCosSim(centers[l],ins[j]);
+                    double[] tmpDisCos = expAbsCosSim(centers[l],i2darr(ins[j]));
                     if(tmpDisCos[0]<minDis){
                         minDis = tmpDisCos[0];
                         minCenIdx = l;
@@ -156,7 +192,7 @@ public class ClusterLocalClassifierChains extends TransformationBasedMultiLabelL
             for (int j = 0; j < clusters.size(); j++) {
                 ArrayList<CluSampInfo> tmp = clusters.get(j);
                 //用于重新计算中心
-                int[] newCenter = new int[ins[0].length];
+                double[] newCenter = new double[ins[0].length];
                 for (int l = 0; l < tmp.size(); l++) {
                     CluSampInfo tmpInfo = tmp.get(l);
                     int [] aSample = ins[tmpInfo.getIndex()];
@@ -172,10 +208,13 @@ public class ClusterLocalClassifierChains extends TransformationBasedMultiLabelL
                     }
                 }
                 for (int l = 0; l < newCenter.length; l++) {
+                    //按照众数
                     if(newCenter[l]>=0)
                         newCenter[l] = 1;
                     else
                         newCenter[l] = -1;
+                    //按照平均值
+                    /*newCenter[l] = newCenter[l]*1.0/tmp.size();*/
                 }
                 //累加距离改变量
                 changeNum += expAbsCosSim(centers[j],newCenter)[0];
