@@ -1,16 +1,17 @@
 package mulan.classifier.transformation;
 
 
-
+import mulan.classifier.MultiLabelLearnerBase;
 import mulan.classifier.MultiLabelOutput;
 import mulan.data.MultiLabelInstances;
 import weka.classifiers.Classifier;
 import weka.classifiers.trees.J48;
-import weka.core.DenseInstance;
-import weka.core.Instance;
-import weka.core.Instances;
+import weka.clusterers.SimpleKMeans;
+import weka.core.*;
 import weka.filters.Filter;
 import weka.filters.unsupervised.attribute.Remove;
+
+import java.math.BigDecimal;
 import java.util.*;
 
 /**
@@ -50,10 +51,15 @@ public class ClusterLocalClassifierChains extends TransformationBasedMultiLabelL
     protected double maxChange;
 
     /**
+     * 采用的内部算法 1 互信息 2 k-means 3 改进的余弦相似度kmodes
+     */
+    int flag;
+
+    /**
      * Default constructor
      */
     public ClusterLocalClassifierChains() {
-        this(new J48(), 2, 10, 0.0, true);
+        this(new J48(), 2, 10, 0.0, true, 1);
     }
 
     /**
@@ -62,7 +68,7 @@ public class ClusterLocalClassifierChains extends TransformationBasedMultiLabelL
      * @param classifier 基分类器
      * @param aNumOfLocalModels 局部分类器链数
      */
-    public ClusterLocalClassifierChains(Classifier classifier, int aNumOfLocalModels, int iterNum, double maxChange, boolean isDebug) {
+    public ClusterLocalClassifierChains(Classifier classifier, int aNumOfLocalModels, int iterNum, double maxChange, boolean isDebug, int flag) {
         super(classifier);
         this.numOfLocalModels = aNumOfLocalModels;
         this.lccs = new LocalClassifieChain[aNumOfLocalModels];
@@ -70,6 +76,7 @@ public class ClusterLocalClassifierChains extends TransformationBasedMultiLabelL
         this.iterNum = iterNum;
         this.maxChange = maxChange;
         this.debug = isDebug;
+        this.flag = flag;
     }
 
     /**
@@ -78,14 +85,14 @@ public class ClusterLocalClassifierChains extends TransformationBasedMultiLabelL
      * @param v2
      * @return double[] -> 2元素 距离值，余弦相似度
      */
-    private static double[] expAbsCosSim(double[] v1, double[] v2) throws IllegalArgumentException{
+    private double[] expAbsCosSim(double[] v1, double[] v2) throws IllegalArgumentException{
         if(v1.length!=v2.length) throw new IllegalArgumentException("向量计算距离维度不匹配");
         double cosup = 0.0;
         double cosdownv1 = 0.0;
         double cosdownv2 = 0.0;
         for (int i = 0; i < v1.length; i++) {
-            if(v1[i]==-1 && v2[i]==-1)
-                continue;
+            /*if(v1[i]==-1 && v2[i]==-1)
+                continue;*/
             cosup += v1[i]*v2[i];
             cosdownv1 += Math.pow(v1[i],2);
             cosdownv2 += Math.pow(v2[i],2);
@@ -93,6 +100,68 @@ public class ClusterLocalClassifierChains extends TransformationBasedMultiLabelL
         double cos = cosup/(Math.sqrt(cosdownv1)*Math.sqrt(cosdownv2));
         double[] res = {-1.0*Math.log(Math.abs(cos)),cos};
         return res;
+    }
+
+    /**
+     * 欧式距离
+     * @param v1
+     * @param v2
+     * @return
+     * @throws IllegalArgumentException
+     */
+    private double euclDis(double[] v1,double[] v2) throws IllegalArgumentException{
+        if(v1.length!=v2.length) throw new IllegalArgumentException("向量计算距离维度不匹配");
+        double tmp = 0.0;
+        for (int i = 0; i < v1.length; i++) {
+            tmp+=Math.pow(v1[i]-v2[i],2);
+        }
+        return Math.sqrt(tmp);
+    }
+
+    /***
+     * 计算两个向量之间的互信息
+     * @param a 向量a
+     * @param b 向量b
+     * @return 保留3位小数的互信息值
+     */
+    private double getMI(double[] a,double[] b) throws IllegalArgumentException{
+        if(a.length!=b.length)
+            throw new IllegalArgumentException("向量计算距离维度不匹配");
+
+        HashMap map = new HashMap();
+        HashMap xmap = new HashMap();
+        HashMap ymap = new HashMap();
+        for (int i = 0; i <a.length ; i++) {
+            String xyKey = String.format("%s%s",(int)a[i],(int)b[i]);
+            String xKey = String.format("%s",(int)a[i]);
+            String yKey = String.format("%s",(int)b[i]);
+            if(map.containsKey(xyKey)){
+                map.put(xyKey,Integer.parseInt(map.get(xyKey).toString())+1);
+            }
+            else map.put(xyKey,1);
+            if(xmap.containsKey(xKey)){
+                xmap.put(xKey,Integer.parseInt(xmap.get(xKey).toString())+1);
+            }
+            else xmap.put(xKey,1);
+            if(ymap.containsKey(yKey)){
+                ymap.put(yKey,Integer.parseInt(ymap.get(yKey).toString())+1);
+            }
+            else ymap.put(yKey,1);
+        }
+        double sum = 0;
+        for (Object o:map.keySet()) {
+            String key = o.toString();
+            String x = key.charAt(0)+"";
+            String y = key.charAt(1)+"";
+            int valueXY = Integer.parseInt(map.get(o).toString());
+            int valueX = Integer.parseInt(xmap.get(x).toString());
+            int valueY = Integer.parseInt(ymap.get(y).toString());
+            double pxy = valueXY/(a.length*1.0);
+            double px = valueX/(a.length*1.0);
+            double py = valueY/(a.length*1.0);
+            sum+=pxy*Math.log(pxy/(px*py));
+        }
+        return new BigDecimal(sum).setScale(3,BigDecimal.ROUND_HALF_UP).doubleValue();
     }
 
     //整形数组变浮点型数组
@@ -104,11 +173,184 @@ public class ClusterLocalClassifierChains extends TransformationBasedMultiLabelL
         return newarr;
     }
 
+    //返回数组中有多少个-1
+    private int getN1Num(double[] arr){
+        int res = 0;
+        for (int i = 0; i < arr.length; i++) {
+            if(arr[i]==-1.0) res++;
+        }
+        return res;
+    }
+
+
+    /**
+     *
+     * @param ins
+     * @return
+     * @throws Exception
+     */
+    private int[] MI(int[][] ins, int[] lidxs) throws Exception {
+        //数据检查
+        HashMap<Integer,double[]> miMap = new HashMap<>(lidxs.length);
+        for (int i = 0; i < lidxs.length; i++) {
+            double[] tmp = new double[lidxs.length];
+            for (int j = 0; j < lidxs.length; j++) {
+                if(i==j) tmp[j]=Double.MAX_VALUE;
+                else tmp[j] = getMI(i2darr(ins[lidxs[i]]),i2darr(ins[lidxs[j]]));
+            }
+            miMap.put(i,tmp);
+        }
+        for (int i = 0; i < miMap.size(); i++) {
+            System.out.println(i + " -> " + Arrays.toString(miMap.get(i)));
+        }
+
+        //找出互信息最小的横纵坐标
+        int minx = -1;
+        int miny = -1;
+        double minv = Double.MAX_VALUE;
+        for (int i = 0; i < lidxs.length; i++) {
+            for (int j = i+1; j < lidxs.length; j++) {
+                double[] tmp = miMap.get(i);
+                if(minv>tmp[j]){
+                    minv = tmp[j];
+                    minx = i;
+                    miny = j;
+                }
+            }
+        }
+
+        int nextIdx = rand.nextInt(lidxs.length)%2==0?minx:miny;
+        int[] res = new int[lidxs.length];
+        res[0]=nextIdx;
+        int i = 1;
+        while (miMap.size()>1){
+            double[] tmp = miMap.get(nextIdx);
+            miMap.remove(nextIdx);
+            int minIdx = -1;
+            double minValue = Double.MAX_VALUE;
+            for (int j = 0; j < tmp.length; j++) {
+                if(minValue>tmp[j]){
+                    minValue=tmp[j];
+                    minIdx = j;
+                }
+            }
+            nextIdx = minIdx;
+            tmp[minIdx] = Double.MAX_VALUE;
+            while (!miMap.containsKey(nextIdx)){
+                minIdx = -1;
+                minValue = Double.MAX_VALUE;
+                for (int j = 0; j < tmp.length; j++) {
+                    if(minValue>tmp[j]){
+                        minValue=tmp[j];
+                        minIdx = j;
+                    }
+                }
+                nextIdx = minIdx;
+                tmp[minIdx] = Double.MAX_VALUE;
+            }
+            res[i] =nextIdx;
+            i++;
+        }
+        System.out.println(Arrays.toString(res));
+        for (int j = 0; j < res.length; j++) {
+            res[j] = lidxs[res[j]];
+        }
+        System.out.println(Arrays.toString(res));
+        return res;
+    }
+
+    private int[][] EMI(int[][] ins,int k,int inum,double maxc) throws Exception{
+        int[][] cluster = Kmeans(ins,k,inum,maxc);
+        for (int i = 0; i < cluster.length; i++) {
+            Arrays.sort(cluster[i]);
+        }
+        for (int i = 0; i < cluster.length; i++) {
+            cluster[i] = MI(ins,cluster[i]);
+        }
+        for (int i = 0; i < cluster.length; i++) {
+            System.out.println(Arrays.toString(cluster[i]));
+        }
+        return cluster;
+    }
+
+    /**
+     * 原始kmeans
+     * @param ins 标签样本
+     * @param k 类簇数
+     * @param inum 最大迭代次数
+     * @param maxc 可接受的最大误差
+     * @return
+     * @throws Exception
+     */
+    private int[][] Kmeans(int[][] ins,int k,int inum,double maxc) throws Exception{
+        //数据检查
+        if(ins.length<k || k<1) throw new IllegalArgumentException("聚类类簇数大于距离数");
+        if(inum<1 && maxc<0.1) throw new IllegalArgumentException("聚类条件输入错误");
+        //构建instances
+        ArrayList<Attribute> atts = new ArrayList<>(ins[0].length);
+        for (int i = 0; i < ins[0].length; i++) {
+                atts.add(new Attribute("f"+i));
+        }
+        Instances cluIns = new Instances("cluins",atts,0);
+        for (int i = 0; i < ins.length; i++) {
+            cluIns.add(new DenseInstance(1.0,i2darr(ins[i])));
+        }
+        //聚类
+        SimpleKMeans kMeans = new SimpleKMeans();
+        kMeans.setMaxIterations(inum);
+        kMeans.setNumClusters(k);
+        kMeans.setInitializeUsingKMeansPlusPlusMethod(true);
+        kMeans.buildClusterer(cluIns);
+        Instances clu_cen = kMeans.getClusterCentroids();
+        double[][] centers = new double[clu_cen.size()][];
+        for (int i = 0; i < clu_cen.size(); i++) {
+            centers[i] = clu_cen.get(i).toDoubleArray();
+        }
+        ArrayList<ArrayList<CluSampInfo>> clusters = new ArrayList<>(centers.length);
+        for (int i = 0; i < centers.length; i++) {
+            clusters.add(new ArrayList<>());
+        }
+        for (int i = 0; i < ins.length; i++) {
+            int mixIdx = -1;
+            double mixVlu = Double.MAX_VALUE;
+            for (int j = 0; j < centers.length; j++) {
+                double tmp = euclDis(centers[j],i2darr(ins[i]));
+                if(tmp<mixVlu){
+                    mixIdx = j;
+                    mixVlu = tmp;
+                }
+            }
+            clusters.get(mixIdx).add(new CluSampInfo(i,mixVlu,true));
+        }
+        //排序
+        int[][] res = new int[clusters.size()][];
+        for (int j = 0; j < clusters.size(); j++) {
+            clusters.get(j).sort(new SortByDisDsc());
+        }
+        for (int j = 0; j < clusters.size(); j++) {
+            ArrayList<CluSampInfo> tmp = clusters.get(j);
+            int[] tmparr = new int[tmp.size()];
+            for (int l = 0; l < tmparr.length; l++) {
+                tmparr[l] = tmp.get(l).getIndex();
+            }
+            res[j] = tmparr;
+        }
+        if(debug){
+            for (int j = 0; j < res.length; j++) {
+                System.out.println(Arrays.toString(res[j]));
+            }
+        }
+        return res;
+    }
+
     /**
      * 改进的k-modes聚类
-     * @param ins
-     * @param k
+     * @param ins 标签样本
+     * @param k 类簇数
+     * @param inum 最大迭代次数
+     * @param maxc 可接受的最大误差
      * @return
+     * @throws IllegalArgumentException
      */
     private int[][] kModesCossimil(int[][] ins,int k,int inum,double maxc) throws IllegalArgumentException{
         //数据检查
@@ -267,7 +509,17 @@ public class ClusterLocalClassifierChains extends TransformationBasedMultiLabelL
             }
         }
         //聚类，并得到lcIdx
-        this.lcIdx=kModesCossimil(labelIns,this.numOfLocalModels,this.iterNum,this.maxChange);
+        if(flag==1){
+            this.lcIdx=EMI(labelIns,this.numOfLocalModels,this.iterNum,this.maxChange);
+        }else if(flag==2){
+            this.lcIdx=Kmeans(labelIns,this.numOfLocalModels,this.iterNum,this.maxChange);
+        }else if(flag==3){
+            this.lcIdx=kModesCossimil(labelIns,this.numOfLocalModels,this.iterNum,this.maxChange);
+        }else{
+
+        }
+
+
     }
 
     @Override
@@ -277,7 +529,9 @@ public class ClusterLocalClassifierChains extends TransformationBasedMultiLabelL
         //根据lcIdx训练k个CC链
         for (int i = 0; i < this.lcIdx.length; i++) {
             this.lccs[i] = new LocalClassifieChain(baseClassifier, this.lcIdx[i]);
+            System.out.println(i+" baseClassifier start build");
             this.lccs[i].build(trainingSet);
+            System.out.println(i+" baseClassifier has built");
         }
     }
 
@@ -297,13 +551,27 @@ public class ClusterLocalClassifierChains extends TransformationBasedMultiLabelL
         MultiLabelOutput mlo = new MultiLabelOutput(bipartition, confidences);
         return mlo;
     }
+
+    public static void main(String[] args) throws Exception{
+        String path = "./data/testData/";
+        MultiLabelLearnerBase learner = new ClusterLocalClassifierChains(new J48(), 2, 100, 0.0, true, 1);
+
+        String trainDatasetPath = path + "emotions-train.arff";
+        String testDatasetPath = path + "emotions-test.arff";
+        String xmlLabelsDefFilePath = path + "emotions.xml";
+        MultiLabelInstances trainDataSet = new MultiLabelInstances(trainDatasetPath, xmlLabelsDefFilePath);
+        MultiLabelInstances testDataSet = new MultiLabelInstances(testDatasetPath, xmlLabelsDefFilePath);
+
+        learner.build(trainDataSet);
+        System.out.println(learner.makePrediction(testDataSet.getDataSet().firstInstance()));
+    }
 }
 
 //按照距离从大到小进行排序
 class SortByDisDsc implements Comparator<CluSampInfo>{
     @Override
     public int compare(CluSampInfo o1, CluSampInfo o2) {
-        return o1.getDis()>o2.getDis()?-1:1;
+        return o1.getDis()>=o2.getDis()?-1:1;
     }
 }
 

@@ -20,6 +20,7 @@ import mulan.data.MultiLabelInstances;
 import mulan.transformations.BinaryRelevanceTransformation;
 import weka.classifiers.AbstractClassifier;
 import weka.classifiers.Classifier;
+import weka.classifiers.trees.J48;
 import weka.core.Instance;
 import weka.core.Instances;
 
@@ -51,6 +52,10 @@ public class BinaryRelevance extends TransformationBasedMultiLabelLearner {
      */
     public BinaryRelevance(Classifier classifier) {
         super(classifier);
+    }
+
+    public BinaryRelevance(){
+        super(new J48());
     }
 
     protected void buildInternal(MultiLabelInstances train) throws Exception {

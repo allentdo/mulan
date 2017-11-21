@@ -10,9 +10,14 @@ import mulan.data.MultiLabelInstances;
 import mulan.evaluation.Evaluation;
 import mulan.evaluation.Evaluator;
 import mulan.evaluation.measure.*;
+import weka.classifiers.Classifier;
+import weka.classifiers.bayes.BayesNet;
 import weka.classifiers.functions.SMO;
+import weka.classifiers.lazy.IBk;
 import weka.classifiers.trees.J48;
 import weka.classifiers.trees.RandomForest;
+import weka.classifiers.trees.RandomTree;
+import weka.core.neighboursearch.NearestNeighbourSearch;
 
 import java.util.ArrayList;
 
@@ -25,12 +30,16 @@ public class CLCCTest {
         String trainDatasetPath = path + "birds-train.arff";
         String testDatasetPath = path + "birds-test.arff";
         String xmlLabelsDefFilePath = path + "birds.xml";
-        MultiLabelLearnerBase CLCC = new ClusterLocalClassifierChains(new J48(), 5, 15, 0.0, true);
-        MultiLabelLearnerBase BR = new BinaryRelevance(new J48());
-        MultiLabelLearnerBase CC = new ClassifierChain(new J48());
+        MultiLabelLearnerBase CLCC1 = new ClusterLocalClassifierChains(new J48(), 2, 100, 0.0, false,1 );
+        MultiLabelLearnerBase CLCC2 = new ClusterLocalClassifierChains(new J48(), 2, 100, 0.0, false,2 );
+        MultiLabelLearnerBase CLCC3 = new ClusterLocalClassifierChains(new J48(), 2, 100, 0.0, false,3 );
+        MultiLabelLearnerBase BR = new BinaryRelevance();
+        MultiLabelLearnerBase CC = new ClassifierChain();
         MultiLabelLearnerBase MLknn = new MLkNN();
-        MultiLabelLearnerBase ECC = new EnsembleOfClassifierChains(new J48(),3, true, true);
-        run(trainDatasetPath,xmlLabelsDefFilePath,testDatasetPath,CLCC);
+        MultiLabelLearnerBase ECC = new EnsembleOfClassifierChains();
+        run(trainDatasetPath,xmlLabelsDefFilePath,testDatasetPath,CLCC1);
+        run(trainDatasetPath,xmlLabelsDefFilePath,testDatasetPath,CLCC2);
+        run(trainDatasetPath,xmlLabelsDefFilePath,testDatasetPath,CLCC3);
         run(trainDatasetPath,xmlLabelsDefFilePath,testDatasetPath,BR);
         run(trainDatasetPath,xmlLabelsDefFilePath,testDatasetPath,CC);
         run(trainDatasetPath,xmlLabelsDefFilePath,testDatasetPath,MLknn);
