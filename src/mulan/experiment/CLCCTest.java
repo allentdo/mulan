@@ -16,8 +16,7 @@ import weka.classifiers.functions.SMO;
 import weka.classifiers.lazy.IBk;
 import weka.classifiers.trees.J48;
 import weka.classifiers.trees.RandomForest;
-import weka.classifiers.trees.RandomTree;
-import weka.core.neighboursearch.NearestNeighbourSearch;
+
 
 import java.util.ArrayList;
 
@@ -30,13 +29,13 @@ public class CLCCTest {
         String trainDatasetPath = path + "birds-train.arff";
         String testDatasetPath = path + "birds-test.arff";
         String xmlLabelsDefFilePath = path + "birds.xml";
-        MultiLabelLearnerBase CLCC1 = new ClusterLocalClassifierChains(new J48(), 2, 100, 0.0, false,1 );
-        MultiLabelLearnerBase CLCC2 = new ClusterLocalClassifierChains(new J48(), 2, 100, 0.0, false,2 );
-        MultiLabelLearnerBase CLCC3 = new ClusterLocalClassifierChains(new J48(), 2, 100, 0.0, false,3 );
-        MultiLabelLearnerBase BR = new BinaryRelevance();
-        MultiLabelLearnerBase CC = new ClassifierChain();
+        MultiLabelLearnerBase CLCC1 = new ClusterLocalClassifierChains(new RandomForest(), 3, 100, 0.0, false,1 );//6480 6252
+        MultiLabelLearnerBase CLCC2 = new ClusterLocalClassifierChains(new RandomForest(), 3, 100, 0.0, false,2 );
+        MultiLabelLearnerBase CLCC3 = new ClusterLocalClassifierChains(new RandomForest(), 3, 100, 0.0, false,3 );
+        MultiLabelLearnerBase BR = new BinaryRelevance(new RandomForest());
+        MultiLabelLearnerBase CC = new ClassifierChain(new RandomForest());
         MultiLabelLearnerBase MLknn = new MLkNN();
-        MultiLabelLearnerBase ECC = new EnsembleOfClassifierChains();
+        MultiLabelLearnerBase ECC = new EnsembleOfClassifierChains(new RandomForest(), 3, true, true);
         run(trainDatasetPath,xmlLabelsDefFilePath,testDatasetPath,CLCC1);
         run(trainDatasetPath,xmlLabelsDefFilePath,testDatasetPath,CLCC2);
         run(trainDatasetPath,xmlLabelsDefFilePath,testDatasetPath,CLCC3);

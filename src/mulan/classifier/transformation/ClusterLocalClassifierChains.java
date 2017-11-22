@@ -189,7 +189,83 @@ public class ClusterLocalClassifierChains extends TransformationBasedMultiLabelL
      * @return
      * @throws Exception
      */
-    private int[] MI(int[][] ins, int[] lidxs) throws Exception {
+    private int[] MIMax(int[][] ins, int[] lidxs) throws Exception {
+        //数据检查
+        HashMap<Integer,double[]> miMap = new HashMap<>(lidxs.length);
+        for (int i = 0; i < lidxs.length; i++) {
+            double[] tmp = new double[lidxs.length];
+            for (int j = 0; j < lidxs.length; j++) {
+                if(i==j) tmp[j]=-1;
+                else tmp[j] = getMI(i2darr(ins[lidxs[i]]),i2darr(ins[lidxs[j]]));
+            }
+            miMap.put(i,tmp);
+        }
+        for (int i = 0; i < miMap.size(); i++) {
+            System.out.println(i + " -> " + Arrays.toString(miMap.get(i)));
+        }
+
+        //找出互信息最小的横纵坐标
+        int minx = -1;
+        int miny = -1;
+        double minv = Double.MAX_VALUE;
+        for (int i = 0; i < lidxs.length; i++) {
+            for (int j = i+1; j < lidxs.length; j++) {
+                double[] tmp = miMap.get(i);
+                if(minv>tmp[j]){
+                    minv = tmp[j];
+                    minx = i;
+                    miny = j;
+                }
+            }
+        }
+
+        int nextIdx = rand.nextInt(lidxs.length)%2==0?minx:miny;
+        int[] res = new int[lidxs.length];
+        res[0]=nextIdx;
+        int i = 1;
+        while (miMap.size()>1){
+            double[] tmp = miMap.get(nextIdx);
+            miMap.remove(nextIdx);
+            int minIdx = -1;
+            double minValue = -0.1;
+            for (int j = 0; j < tmp.length; j++) {
+                if(minValue<tmp[j]){
+                    minValue=tmp[j];
+                    minIdx = j;
+                }
+            }
+            nextIdx = minIdx;
+            tmp[minIdx] = -0.1;
+            while (!miMap.containsKey(nextIdx)){
+                minIdx = -1;
+                minValue = -0.1;
+                for (int j = 0; j < tmp.length; j++) {
+                    if(minValue<tmp[j]){
+                        minValue=tmp[j];
+                        minIdx = j;
+                    }
+                }
+                nextIdx = minIdx;
+                tmp[minIdx] = -0.1;
+            }
+            res[i] =nextIdx;
+            i++;
+        }
+        System.out.println(Arrays.toString(res));
+        for (int j = 0; j < res.length; j++) {
+            res[j] = lidxs[res[j]];
+        }
+        return res;
+    }
+
+
+    /**
+     *
+     * @param ins
+     * @return
+     * @throws Exception
+     */
+    private int[] MIMix(int[][] ins, int[] lidxs) throws Exception {
         //数据检查
         HashMap<Integer,double[]> miMap = new HashMap<>(lidxs.length);
         for (int i = 0; i < lidxs.length; i++) {
@@ -255,7 +331,6 @@ public class ClusterLocalClassifierChains extends TransformationBasedMultiLabelL
         for (int j = 0; j < res.length; j++) {
             res[j] = lidxs[res[j]];
         }
-        System.out.println(Arrays.toString(res));
         return res;
     }
 
@@ -265,7 +340,7 @@ public class ClusterLocalClassifierChains extends TransformationBasedMultiLabelL
             Arrays.sort(cluster[i]);
         }
         for (int i = 0; i < cluster.length; i++) {
-            cluster[i] = MI(ins,cluster[i]);
+            cluster[i] = MIMix(ins,cluster[i]);
         }
         for (int i = 0; i < cluster.length; i++) {
             System.out.println(Arrays.toString(cluster[i]));
