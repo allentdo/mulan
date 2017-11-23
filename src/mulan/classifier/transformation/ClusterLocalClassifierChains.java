@@ -190,6 +190,7 @@ public class ClusterLocalClassifierChains extends TransformationBasedMultiLabelL
      * @throws Exception
      */
     private int[] MIMax(int[][] ins, int[] lidxs) throws Exception {
+        if(lidxs.length==1) return lidxs;
         //数据检查
         HashMap<Integer,double[]> miMap = new HashMap<>(lidxs.length);
         for (int i = 0; i < lidxs.length; i++) {
@@ -266,6 +267,8 @@ public class ClusterLocalClassifierChains extends TransformationBasedMultiLabelL
      * @throws Exception
      */
     private int[] MIMix(int[][] ins, int[] lidxs) throws Exception {
+        if(lidxs.length==1) return lidxs;
+
         //数据检查
         HashMap<Integer,double[]> miMap = new HashMap<>(lidxs.length);
         for (int i = 0; i < lidxs.length; i++) {
@@ -276,9 +279,10 @@ public class ClusterLocalClassifierChains extends TransformationBasedMultiLabelL
             }
             miMap.put(i,tmp);
         }
+        if(debug){
         for (int i = 0; i < miMap.size(); i++) {
             System.out.println(i + " -> " + Arrays.toString(miMap.get(i)));
-        }
+        }}
 
         //找出互信息最小的横纵坐标
         int minx = -1;
@@ -327,7 +331,8 @@ public class ClusterLocalClassifierChains extends TransformationBasedMultiLabelL
             res[i] =nextIdx;
             i++;
         }
-        System.out.println(Arrays.toString(res));
+        if(debug){
+        System.out.println(Arrays.toString(res));}
         for (int j = 0; j < res.length; j++) {
             res[j] = lidxs[res[j]];
         }
@@ -342,9 +347,10 @@ public class ClusterLocalClassifierChains extends TransformationBasedMultiLabelL
         for (int i = 0; i < cluster.length; i++) {
             cluster[i] = MIMix(ins,cluster[i]);
         }
+        if(debug){
         for (int i = 0; i < cluster.length; i++) {
             System.out.println(Arrays.toString(cluster[i]));
-        }
+        }}
         return cluster;
     }
 
@@ -453,9 +459,6 @@ public class ClusterLocalClassifierChains extends TransformationBasedMultiLabelL
 
         //按照距离最远原则初始化k个蔟中心点
         int idx1 = rand.nextInt(ins.length);
-        if(debug){
-            System.out.println(idx1);
-        }
         centers[0] = i2darr(ins[idx1]);
         for (int j = 1; j < k; j++) {
             double maxDis = -1;
@@ -473,7 +476,6 @@ public class ClusterLocalClassifierChains extends TransformationBasedMultiLabelL
             }
 
             centers[j] = i2darr(ins[maxIdx]);
-            if(debug) System.out.println(maxIdx);
         }
 
         //记录聚类中心改变量
@@ -498,12 +500,20 @@ public class ClusterLocalClassifierChains extends TransformationBasedMultiLabelL
                 for (int l = 0; l < centers.length; l++) {
                     double[] tmpDisCos = expAbsCosSim(centers[l],i2darr(ins[j]));
                     if(tmpDisCos[0]<minDis){
+                        System.out.println(tmpDisCos[0]+","+minDis);
                         minDis = tmpDisCos[0];
                         minCenIdx = l;
                         minCos = tmpDisCos[1];
                     }
                 }
-                clusters.get(minCenIdx).add(new CluSampInfo(j,minDis,minCos>0));
+
+                try{
+                clusters.get(minCenIdx).add(new CluSampInfo(j,minDis,minCos>0));}
+                catch (Exception e){
+                    System.out.println(i+","+j);
+                    System.out.println("EXP!!!");
+                    throw e;
+                }
             }
             //根据新类簇重新计算每个类簇的中心，并记录总体中心距离改变
             for (int j = 0; j < clusters.size(); j++) {
@@ -539,14 +549,6 @@ public class ClusterLocalClassifierChains extends TransformationBasedMultiLabelL
                 centers[j] = newCenter;
             }
             i++;
-            if(debug){
-                System.out.println(changeNum);
-                for (int j = 0; j < clusters.size(); j++) {
-                    System.out.println(Arrays.toString(centers[j]));
-                    System.out.println(clusters.get(j));
-                }
-                System.out.println();
-            }
         }
         int[][] res = new int[k][];
         for (int j = 0; j < clusters.size(); j++) {
@@ -559,11 +561,6 @@ public class ClusterLocalClassifierChains extends TransformationBasedMultiLabelL
                 tmparr[l] = tmp.get(l).getIndex();
             }
             res[j] = tmparr;
-        }
-        if(debug){
-            for (int j = 0; j < res.length; j++) {
-                System.out.println(Arrays.toString(res[j]));
-            }
         }
         return res;
     }
@@ -602,12 +599,12 @@ public class ClusterLocalClassifierChains extends TransformationBasedMultiLabelL
         Instances dataSet = new Instances(trainingSet.getDataSet());
         computeLcIdx(dataSet);
         //根据lcIdx训练k个CC链
-        for (int i = 0; i < this.lcIdx.length; i++) {
+        /*for (int i = 0; i < this.lcIdx.length; i++) {
             this.lccs[i] = new LocalClassifieChain(baseClassifier, this.lcIdx[i]);
             System.out.println(i+" baseClassifier start build");
             this.lccs[i].build(trainingSet);
-            System.out.println(i+" baseClassifier has built");
-        }
+//            System.out.println(i+" baseClassifier has built");
+        }*/
     }
 
     @Override
@@ -629,16 +626,16 @@ public class ClusterLocalClassifierChains extends TransformationBasedMultiLabelL
 
     public static void main(String[] args) throws Exception{
         String path = "./data/testData/";
-        MultiLabelLearnerBase learner = new ClusterLocalClassifierChains(new J48(), 2, 100, 0.0, true, 1);
+        MultiLabelLearnerBase learner = new ClusterLocalClassifierChains(new J48(), 1, 100, 0.0, true, 3);
 
-        String trainDatasetPath = path + "emotions-train.arff";
-        String testDatasetPath = path + "emotions-test.arff";
-        String xmlLabelsDefFilePath = path + "emotions.xml";
+        String trainDatasetPath = path + "CAL500-train.arff";
+        String testDatasetPath = path + "CAL500-test.arff";
+        String xmlLabelsDefFilePath = path + "CAL500.xml";
         MultiLabelInstances trainDataSet = new MultiLabelInstances(trainDatasetPath, xmlLabelsDefFilePath);
         MultiLabelInstances testDataSet = new MultiLabelInstances(testDatasetPath, xmlLabelsDefFilePath);
 
         learner.build(trainDataSet);
-        System.out.println(learner.makePrediction(testDataSet.getDataSet().firstInstance()));
+        //System.out.println(learner.makePrediction(testDataSet.getDataSet().firstInstance()));
     }
 }
 
