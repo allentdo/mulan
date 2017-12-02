@@ -22,11 +22,11 @@ public class XiaXiaExp {
     public static void main(String[] args) throws Exception{
         int numFolds = 2;
         String basePath = "./data/testData/";
-        String[] smalldatas={};
-        String[] bigdatas={"enron"};
+        String[] smalldatas={"enron"};
+        String[] bigdatas={};
         for (int i = 0; i < smalldatas.length; i++) {
             String data = smalldatas[i];
-            for (int j = 8; j <= 10; j++) {
+            for (int j = 9; j <= 10; j++) {
                 MultiLabelLearnerBase mlknn = new MLkNN(j,1.0);
                 exp_cross(basePath+data+".arff", basePath+data+".xml",mlknn,data+"_"+mlknn.getClass().getSimpleName()+"_k"+j+"_folds"+numFolds,numFolds);
             }

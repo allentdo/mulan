@@ -86,21 +86,21 @@ public class ClusterLocalClassifierChains extends TransformationBasedMultiLabelL
      * @return double[] -> 2元素 距离值，余弦相似度
      */
     private double[] expAbsCosSim(double[] v1, double[] v2) throws IllegalArgumentException{
-        if(v1.length!=v2.length) throw new IllegalArgumentException("向量计算距离维度不匹配");
+        if(v1.length!=v2.length || v1.length<1) throw new IllegalArgumentException("向量计算距离维度不匹配或长度小于1");
         double cosup = 0.0;
         double cosdownv1 = 0.0;
         double cosdownv2 = 0.0;
         for (int i = 0; i < v1.length; i++) {
-            /*if(v1[i]==-1 && v2[i]==-1)
-                continue;*/
             cosup += v1[i]*v2[i];
             cosdownv1 += Math.pow(v1[i],2);
             cosdownv2 += Math.pow(v2[i],2);
         }
         double cos = cosup/(Math.sqrt(cosdownv1)*Math.sqrt(cosdownv2));
+        if(cos==0) cos = Double.MIN_VALUE;
         double[] res = {-1.0*Math.log(Math.abs(cos)),cos};
         return res;
     }
+
 
     /**
      * 欧式距离
@@ -433,7 +433,7 @@ public class ClusterLocalClassifierChains extends TransformationBasedMultiLabelL
      * @return
      * @throws IllegalArgumentException
      */
-    private int[][] kModesCossimil(int[][] ins,int k,int inum,double maxc) throws IllegalArgumentException{
+    private int[][] kModesCossimil(int[][] ins,int k,int inum,double maxc) throws Exception{
         //数据检查
         if(ins.length<k || k<1) throw new IllegalArgumentException("聚类类簇数大于距离数");
         if(inum<1 && maxc<0.1) throw new IllegalArgumentException("聚类条件输入错误");
@@ -458,7 +458,7 @@ public class ClusterLocalClassifierChains extends TransformationBasedMultiLabelL
         }*/
 
         //按照距离最远原则初始化k个蔟中心点
-        int idx1 = rand.nextInt(ins.length);
+        /*int idx1 = rand.nextInt(ins.length);
         centers[0] = i2darr(ins[idx1]);
         for (int j = 1; j < k; j++) {
             double maxDis = -1;
@@ -476,7 +476,48 @@ public class ClusterLocalClassifierChains extends TransformationBasedMultiLabelL
             }
 
             centers[j] = i2darr(ins[maxIdx]);
+        }*/
+
+        //按照K-means++的方式初始化K个蔟中心点
+        HashSet<Integer> cIdxMap = new HashSet<>(k);
+        int idx1 = rand.nextInt(ins.length);
+        centers[0]=i2darr(ins[idx1]);
+        cIdxMap.add(idx1);
+        for (int j = 1; j < k; j++) {
+            double[] D = new double[ins.length];
+            double sum = 0;
+            for (int l = 0; l < ins.length; l++) {
+                if(cIdxMap.contains(l)){
+                    D[l]=0;
+                }else {
+                    double mix = Double.MAX_VALUE;
+                    for (int m = 0; m < j; m++) {
+                        double i2cDis = expAbsCosSim(centers[m],i2darr(ins[l]))[0];
+                        mix = mix>i2cDis?i2cDis:mix;
+                    }
+                    D[l]=mix;
+                    sum+=mix;
+                }
+            }
+            //根据概率选择距离较大的点作为中心
+            sum *= rand.nextDouble();
+            int l = -1;
+            while (sum>0){
+                l++;
+                sum-=D[l];
+
+            }
+            if(cIdxMap.contains(l)) throw new Exception("初始化聚类中心出现重复");
+            else {
+                centers[j] = i2darr(ins[l]);
+                cIdxMap.add(l);
+            }
         }
+        for (int j = 0; j < centers.length; j++) {
+            System.out.println(Arrays.toString(centers[j]));
+        }
+
+
 
         //记录聚类中心改变量
         double changeNum = Double.MAX_VALUE;
@@ -499,21 +540,14 @@ public class ClusterLocalClassifierChains extends TransformationBasedMultiLabelL
                 double minCos = -1;
                 for (int l = 0; l < centers.length; l++) {
                     double[] tmpDisCos = expAbsCosSim(centers[l],i2darr(ins[j]));
-                    if(tmpDisCos[0]<minDis){
-                        System.out.println(tmpDisCos[0]+","+minDis);
+                    if(tmpDisCos[0]<=minDis){
                         minDis = tmpDisCos[0];
                         minCenIdx = l;
                         minCos = tmpDisCos[1];
                     }
                 }
+                clusters.get(minCenIdx).add(new CluSampInfo(j,minDis,minCos>0));
 
-                try{
-                clusters.get(minCenIdx).add(new CluSampInfo(j,minDis,minCos>0));}
-                catch (Exception e){
-                    System.out.println(i+","+j);
-                    System.out.println("EXP!!!");
-                    throw e;
-                }
             }
             //根据新类簇重新计算每个类簇的中心，并记录总体中心距离改变
             for (int j = 0; j < clusters.size(); j++) {
@@ -599,12 +633,12 @@ public class ClusterLocalClassifierChains extends TransformationBasedMultiLabelL
         Instances dataSet = new Instances(trainingSet.getDataSet());
         computeLcIdx(dataSet);
         //根据lcIdx训练k个CC链
-        /*for (int i = 0; i < this.lcIdx.length; i++) {
+        for (int i = 0; i < this.lcIdx.length; i++) {
             this.lccs[i] = new LocalClassifieChain(baseClassifier, this.lcIdx[i]);
             System.out.println(i+" baseClassifier start build");
             this.lccs[i].build(trainingSet);
-//            System.out.println(i+" baseClassifier has built");
-        }*/
+            System.out.println(i+" baseClassifier has built");
+        }
     }
 
     @Override
@@ -625,7 +659,7 @@ public class ClusterLocalClassifierChains extends TransformationBasedMultiLabelL
     }
 
     public static void main(String[] args) throws Exception{
-        String path = "./data/testData/";
+        /*String path = "./data/testData/";
         MultiLabelLearnerBase learner = new ClusterLocalClassifierChains(new J48(), 1, 100, 0.0, true, 3);
 
         String trainDatasetPath = path + "CAL500-train.arff";
@@ -634,7 +668,7 @@ public class ClusterLocalClassifierChains extends TransformationBasedMultiLabelL
         MultiLabelInstances trainDataSet = new MultiLabelInstances(trainDatasetPath, xmlLabelsDefFilePath);
         MultiLabelInstances testDataSet = new MultiLabelInstances(testDatasetPath, xmlLabelsDefFilePath);
 
-        learner.build(trainDataSet);
+        learner.build(trainDataSet);*/
         //System.out.println(learner.makePrediction(testDataSet.getDataSet().firstInstance()));
     }
 }
