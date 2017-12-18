@@ -2,6 +2,7 @@ package mulan.experiment;
 
 import mulan.classifier.MultiLabelLearnerBase;
 import mulan.classifier.lazy.MLkNN;
+import mulan.classifier.meta.HOMER;
 import mulan.classifier.meta.RAkEL;
 import mulan.classifier.neural.BPMLL;
 import mulan.classifier.transformation.BinaryRelevance;
@@ -24,15 +25,16 @@ import java.util.ArrayList;
  */
 public class XiaXiaSmallDataExp {
     public static void main(String[] args) throws Exception{
-        int folds = 5;
+        int folds = 10;
         FileWriter fw = new FileWriter("xiaxia_smalldata_fold5.txt", true);
         PrintWriter toFile = new PrintWriter(fw);
-        String[] datasets = {"birds","CAL500","bibtex","Corel5k","emotions","enron","flags","genbase","medical","scene","yeast"};
+        String[] datasets = {"birds","CAL500","emotions","enron","flags","genbase","medical","scene","yeast","bibtex","Corel5k"};
         String path = "./data/";
         for (int i = 0; i < datasets.length; i++) {
             String name = datasets[i];
+            System.out.println("dataset:"+name);
             toFile.println("dataset:"+name);
-            toFile.println("HammingLoss  ,SubsetAccurac,ExamplePrecis,ExampleRecall,ExampleFMeasu,ExampleAccura,ExampleSpecif,MicroPrecisio,MicroRecall  ,MicroFMeasure,MicroSpecific,MacroPrecisio,MacroRecall  ,MacroFMeasure,MacroSpecific,AveragePrecis,Coverage     ,OneError     ,IsError      ,ErrorSetSize ,RankingLoss  ,MeanAvePrecis,GeoPrec,MeanAveInPrec,GeoInPr,MicroAUC     ,MacroAUCLogLoss      ,time,Classfier");
+            toFile.println("HammingLoss  ,SubsetAccurac,ExamplePrecis,ExampleRecall,ExampleFMeasu,ExampleAccura,ExampleSpecif,MicroPrecisio,MicroRecall  ,MicroFMeasure,MicroSpecific,MacroPrecisio,MacroRecall  ,MacroFMeasure,MacroSpecific,AveragePrecis,Coverage     ,OneError     ,IsError      ,ErrorSetSize ,RankingLoss  ,MeanAvePrecis,MicroAUC     ,MacroAUC      ,time,Classfier");
             String datasetPath = path + name+ ".arff";
             //String testDatasetPath = path + name+ "-test.arff";
             String xmlLabelsDefFilePath = path + name+ ".xml";
@@ -48,6 +50,9 @@ public class XiaXiaSmallDataExp {
             MultiLabelLearnerBase rakel = new RAkEL(new BinaryRelevance(new J48()));
             exp_cross(datasetPath,xmlLabelsDefFilePath,rakel,rakel.getClass().getSimpleName(),toFile,folds);
 
+            MultiLabelLearnerBase homer = new HOMER();
+            exp_cross(datasetPath,xmlLabelsDefFilePath,homer,homer.getClass().getSimpleName(),toFile,folds);
+
             MultiLabelLearnerBase mlknn = new MLkNN();
             exp_cross(datasetPath,xmlLabelsDefFilePath,mlknn,mlknn.getClass().getSimpleName(),toFile,folds);
 
@@ -58,8 +63,9 @@ public class XiaXiaSmallDataExp {
     }
 
     private static void exp_cross(String arffStr, String xmlStr,MultiLabelLearnerBase learn, String clsName, PrintWriter w, int folds) throws Exception{
+        System.out.println(clsName);
         MultiLabelInstances dataset = new MultiLabelInstances(arffStr, xmlStr);
-        /*int numOfLabels = dataset.getNumLabels();
+        int numOfLabels = dataset.getNumLabels();
         Evaluator eval = new Evaluator();
         //多标签指标评估
         ArrayList measures = new ArrayList();
@@ -88,16 +94,12 @@ public class XiaXiaSmallDataExp {
         measures.add(new ErrorSetSize());
         measures.add(new RankingLoss());
         measures.add(new MeanAveragePrecision(numOfLabels));
-        measures.add(new GeometricMeanAveragePrecision(numOfLabels));
-        measures.add(new MeanAverageInterpolatedPrecision(numOfLabels, 10));
-        measures.add(new GeometricMeanAverageInterpolatedPrecision(numOfLabels, 10));
         measures.add(new MicroAUC(numOfLabels));
         measures.add(new MacroAUC(numOfLabels));
-        measures.add(new LogLoss());
         long time = System.currentTimeMillis();
         MultipleEvaluation results = eval.crossValidate(learn, dataset, measures, folds);
         time = System.currentTimeMillis()-time;
         w.println(results.toCSV().replace(";",",")+time+","+clsName);
-        w.flush();*/
+        w.flush();
     }
 }
