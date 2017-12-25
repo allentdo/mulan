@@ -11,11 +11,16 @@ import weka.classifiers.trees.J48;
 import weka.clusterers.SimpleKMeans;
 import weka.core.*;
 import weka.filters.Filter;
+import weka.filters.supervised.instance.SpreadSubsample;
 import weka.filters.unsupervised.attribute.Remove;
+import weka.filters.unsupervised.attribute.RemoveByName;
+import weka.filters.unsupervised.attribute.RemoveByNameTest;
+import weka.filters.unsupervised.instance.Resample;
 import weka.filters.unsupervised.instance.SubsetByExpression;
 import weka.filters.unsupervised.instance.SubsetByExpressionTest;
 
 import java.util.HashMap;
+import java.util.Random;
 
 /**
  * Created by WangHong on 2017/11/19.
@@ -33,6 +38,8 @@ public class LocalClassifieChainImb extends TransformationBasedMultiLabelLearner
      */
     protected FilteredClassifier[] ensemble;
 
+    private double rate;
+
     /**
      * Creates a new instance using J48 as the underlying classifier
      */
@@ -47,9 +54,10 @@ public class LocalClassifieChainImb extends TransformationBasedMultiLabelLearner
      * used for training each of the binary models
      * @param aChain contains the order of the label indexes [0..numLabels-1]
      */
-    public LocalClassifieChainImb(Classifier classifier, int[] aChain) {
+    public LocalClassifieChainImb(Classifier classifier, int[] aChain, double rate) {
         super(classifier);
         chain = aChain;
+        this.rate=rate;
     }
 
     /**
@@ -112,7 +120,8 @@ public class LocalClassifieChainImb extends TransformationBasedMultiLabelLearner
             remove.setInvertSelection(false);
 
             ensemble[i].setFilter(remove);
-            Instances trainData= undersampled(trainDataset,labelIndices[chain[i]],(Remove)(Filter.makeCopy(remove)));
+            Instances trainData= undersampledCluser(trainDataset,labelIndices[chain[i]],indicesToRemove);
+            System.out.println(trainData.size());
 
 
             debug("Bulding model " + (i + 1) + "/" + numLabels);
@@ -120,21 +129,64 @@ public class LocalClassifieChainImb extends TransformationBasedMultiLabelLearner
         }
     }
 
-    private Instances undersampled(Instances train,int classidx,Remove rm)throws Exception{
+    private Instances undersampledCluser(Instances train,int classidx,int[] rmidx)throws Exception{
+
+        int[] rmarr = new int[rmidx.length+1];
+        for (int i = 0; i < rmarr.length-1; i++) {
+            rmarr[i] = rmidx[i];
+        }
+        rmarr[rmarr.length-1]=classidx;
+
+        Remove rm = new Remove();
+        rm.setAttributeIndicesArray(rmarr);
+        rm.setInvertSelection(false);
+        rm.setInputFormat(train);
+
+
         train.setClassIndex(classidx);
-        Instances tr = Filter.useFilter(train, rm);
+
         SubsetByExpression subsetFilter1 = new SubsetByExpression();
         subsetFilter1.setExpression("CLASS is '1'");
+        subsetFilter1.setInputFormat(train);
 
         SubsetByExpression subsetFilter0 = new SubsetByExpression();
-        subsetFilter1.setExpression("CLASS is '0'");
+        subsetFilter0.setExpression("CLASS is '0'");
+        subsetFilter0.setInputFormat(train);
 
+        Instances tr0 = Filter.useFilter(train, subsetFilter0);
+        Instances tr1 = Filter.useFilter(train, subsetFilter1);
+
+
+
+
+        int num0 = tr0.size();
+        int num1 = tr1.size();
+
+        System.out.println("num0: "+num0+"  num1: "+num1);
+
+        boolean flag = true;
+        int samNum = -1;
+
+        Instances tr = null;
+        if(num0>num1){
+            samNum = (int)(num1*this.rate)/2;
+            if(samNum>=num0) return train;
+            tr=Filter.useFilter(tr0,rm);
+        }else if (num0<num1){
+            flag=false;
+            samNum = (int)(num0*this.rate)/2;
+            if(samNum>=num1) return train;
+            tr=Filter.useFilter(tr1,rm);
+        }else {
+            return train;
+        }
+        tr.setClassIndex(-1);
         SimpleKMeans kMeans = new SimpleKMeans();
         kMeans.setNumClusters(1);
         kMeans.buildClusterer(tr);
         Instance center = kMeans.getClusterCentroids().firstInstance();
         //计算每个实例到中心的距离，并排序
-        DistanceFunction disf = new EuclideanDistance();
+        DistanceFunction disf = new EuclideanDistance(tr);
         double [] disarr = new double[tr.size()];
         for (int i = 0; i < tr.size(); i++) {
             disarr[i] = disf.distance(tr.get(i),center);
@@ -148,11 +200,42 @@ public class LocalClassifieChainImb extends TransformationBasedMultiLabelLearner
             disarr[minIdx] = disarr[i];
             disarr[i] = tmp;
 
-            Instance tmpins = tr.get(minIdx);
-            tr.set(minIdx,tr.get(i));
-            tr.set(i,tmpins);
+            if(flag){
+                Instance tmpins = tr0.get(minIdx);
+                tr0.set(minIdx,tr0.get(i));
+                tr0.set(i,tmpins);
+            }else {
+                Instance tmpins = tr1.get(minIdx);
+                tr1.set(minIdx,tr1.get(i));
+                tr1.set(i,tmpins);
+            }
+        }
+        if(flag){
+            tr1.addAll(tr0.subList(0,samNum));
+            tr1.addAll(tr0.subList(num0-samNum,num0));
+            tr1.randomize(new Random(System.nanoTime()));
+            tr1.setClassIndex(classidx);
+            return tr1;
+        }else {
+            tr0.addAll(tr1.subList(0,samNum));
+            tr0.addAll(tr1.subList(num1-samNum,num1));
+            tr0.randomize(new Random(System.nanoTime()));
+            tr0.setClassIndex(classidx);
+            return tr0;
         }
 
+    }
+
+
+    private Instances undersampledRandom(Instances train,int classidx) throws Exception{
+        System.out.println(train.size());
+        train.setClassIndex(classidx);
+        SpreadSubsample  rs = new SpreadSubsample();
+        rs.setDistributionSpread(1.0);
+        rs.setInputFormat(train);
+        Instances tr = Filter.useFilter(train, rs);
+        System.out.println("unsample size"+tr.size());
+        return tr;
     }
 
     protected MultiLabelOutput makePredictionInternal(Instance instance) throws Exception {
@@ -192,7 +275,7 @@ public class LocalClassifieChainImb extends TransformationBasedMultiLabelLearner
         String path = "./data/";
         Classifier baseClassifier = new J48();
         int[] chn = {5,3,4,0};
-        MultiLabelLearnerBase learner = new LocalClassifieChainImb(baseClassifier,chn);
+        MultiLabelLearnerBase learner = new LocalClassifieChainImb(baseClassifier,chn,1.0);
 
         String trainDatasetPath = path + "emotions-train.arff";
         String testDatasetPath = path + "emotions-test.arff";

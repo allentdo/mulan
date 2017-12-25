@@ -25,9 +25,9 @@ import java.util.ArrayList;
 public class CLCCTest {
     public static void main(String[] args) throws Exception{
         int folds = 10;
-        FileWriter fw = new FileWriter("res_coskmodes.txt", true);
+        FileWriter fw = new FileWriter("res_coskmodimb.txt", true);
         PrintWriter toFile = new PrintWriter(fw);
-        String[] datasets = {"birds","emotions","genbase","medical","CAL500","flags","enron"};
+        String[] datasets = {"emotions"/*,"medical","CAL500","flags","enron"*/};
         String path = "./data/";
         for (int i = 0; i < datasets.length; i++) {
             String name = datasets[i];
@@ -37,37 +37,14 @@ public class CLCCTest {
             //String testDatasetPath = path + name+ "-test.arff";
             String xmlLabelsDefFilePath = path + name+ ".xml";
             for (int j = 1; j < 6; j++) {
-               /* MultiLabelLearnerBase CLCC1 = new ClusterLocalClassifierChains(new RandomForest(), j, 100, 0.0, false,1);
-                exp_cross(datasetPath,xmlLabelsDefFilePath,CLCC1,CLCC1.getClass().getSimpleName()+" fun="+1 +" k="+ j,toFile,folds);
-                MultiLabelLearnerBase CLCC2 = new ClusterLocalClassifierChains(new RandomForest(), j, 100, 0.0, false,2);
-                exp_cross(datasetPath,xmlLabelsDefFilePath,CLCC2,CLCC2.getClass().getSimpleName()+" fun="+2 +" k="+ j,toFile,folds);*/
-                MultiLabelLearnerBase CLCC3 = new ClusterLocalClassifierChains(new J48(), j, 100, 0.0, false,3);
+                MultiLabelLearnerBase CLCC3 = new ClusterLocalClassifierChains(new RandomForest(), j, 100, 0.0, false,3);
                 exp_cross(datasetPath,xmlLabelsDefFilePath,CLCC3,CLCC3.getClass().getSimpleName()+" fun="+3 +" k="+ j,toFile,folds);
+
+                MultiLabelLearnerBase CLCCimb3 = new ClusterLocalClassifierChainsImb(new RandomForest(), j, 100, 0.0, false,3,1);
+                exp_cross(datasetPath,xmlLabelsDefFilePath,CLCCimb3,CLCCimb3.getClass().getSimpleName()+" fun="+3 +" k="+ j,toFile,folds);
             }
-            /*MultiLabelLearnerBase BR = new BinaryRelevance(new RandomForest());
-            MultiLabelLearnerBase CC = new ClassifierChain(new RandomForest());
-            //MultiLabelLearnerBase MLknn = new MLkNN();
-            MultiLabelLearnerBase ECC = new EnsembleOfClassifierChains(new RandomForest(), 5, true, true);
-            //MultiLabelLearnerBase Bpmll = new BPMLL();
-            MultiLabelLearnerBase lp = new LabelPowerset(new RandomForest());
-            MultiLabelLearnerBase homer = new HOMER(new BinaryRelevance(new RandomForest()),3,HierarchyBuilder.Method.BalancedClustering);
-            MultiLabelLearnerBase rakel = new RAkEL(new BinaryRelevance(new RandomForest()));
-            MultiLabelLearnerBase tscc = new TwoStageClassifierChainArchitecture(new RandomForest());
-
-
-            exp_cross(datasetPath,xmlLabelsDefFilePath,BR,BR.getClass().getSimpleName(),toFile,folds);
-            exp_cross(datasetPath,xmlLabelsDefFilePath,CC,CC.getClass().getSimpleName(),toFile,folds);
-            //exp_cross(datasetPath,xmlLabelsDefFilePath,MLknn,MLknn.getClass().getSimpleName(),toFile,folds);
-            exp_cross(datasetPath,xmlLabelsDefFilePath,ECC,ECC.getClass().getSimpleName(),toFile,folds);
-            //exp_cross(datasetPath,xmlLabelsDefFilePath,Bpmll,Bpmll.getClass().getSimpleName(),toFile,folds);
-            exp_cross(datasetPath,xmlLabelsDefFilePath,lp,lp.getClass().getSimpleName(),toFile,folds);
-            exp_cross(datasetPath,xmlLabelsDefFilePath,homer,homer.getClass().getSimpleName(),toFile,folds);
-            exp_cross(datasetPath,xmlLabelsDefFilePath,rakel,rakel.getClass().getSimpleName(),toFile,folds);
-            exp_cross(datasetPath,xmlLabelsDefFilePath,tscc,tscc.getClass().getSimpleName(),toFile,folds);*/
 
         }
-
-
         toFile.close();
     }
 
